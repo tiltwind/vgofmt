@@ -1,0 +1,17 @@
+package sample
+
+type S struct{ A, B, C int }
+type Q struct{ Child *Q }
+
+func (q Q) Next(...Q) Q { return q }
+func (q Q) List() []Q   { return nil }
+func f() map[string]string {
+	return map[string]string{
+		"id":          "1",
+		"intent_id":   "2",
+		"spec_no":     "S1",
+		"title":       "title",
+		"status":      "draft",
+		"row_version": "1",
+	}
+}

@@ -1,0 +1,13 @@
+package sample
+
+type S struct{ A, B, C int }
+type Q struct{ Child *Q }
+
+func (q Q) Next(...Q) Q { return q }
+func (q Q) List() []Q   { return nil }
+
+var _ = map[string]int{
+	"a": 1,
+	"b": 2,
+	"c": 3,
+}

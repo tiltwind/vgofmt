@@ -1,0 +1,17 @@
+package sample
+
+type S struct{ A, B, C int }
+type Q struct{ Child *Q }
+
+func (q Q) Next(...Q) Q { return q }
+func (q Q) List() []Q   { return nil }
+func f(remote struct{ ID, SourceKey, EnvironmentID string }, pub struct {
+	ReleaseID string
+	Snapshot  struct {
+		Request struct{ SourceKey, EnvironmentID string }
+	}
+}) bool {
+	return remote.ID != pub.ReleaseID ||
+		remote.SourceKey != pub.Snapshot.Request.SourceKey ||
+		remote.EnvironmentID != pub.Snapshot.Request.EnvironmentID
+}
