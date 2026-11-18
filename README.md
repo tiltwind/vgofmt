@@ -40,14 +40,14 @@ to `./...`; use `./pkg/...` to restrict the scope.
 - Logical expressions with more than two terms are split after operators only
   when a line they occupy exceeds 80 characters; shorter expressions stay on one
   line. Whitespace-only line breaks after logical operators are joined first.
-  Parentheses and operator precedence are preserved.
-- Selector chains are split only when they contain more than two calls, or when
-  a line they occupy exceeds 80 characters. When split, the receiver, its first
-  call, and all struct field selections stay on the opening line; each further
-  call starts a new line after the dot. Whitespace-only line breaks between a dot
-  and its selector are joined, so object references such as `db.DB` and
-  `aa.Error` are never broken. Line width is measured after literal expansion,
-  with each tab counting as one character. Comments keep their line breaks.
+  Parentheses and operator precedence are preserved. Line width is measured after
+  literal expansion, with each tab counting as one character.
+- Selector chains are split only when they contain more than two calls. When
+  split, the receiver, its first call, and all struct field selections stay on the
+  opening line; each further call starts a new line after the dot.
+  Whitespace-only line breaks between a dot and its selector are joined, so object
+  references such as `db.DB` and `aa.Error` are never broken. Comments keep their
+  line breaks.
 - Every selected source file is normalized with `go/format`, then gofumpt
   **v0.12.0**, with extra rules disabled. The module's language version and path
   are passed to gofumpt.

@@ -120,7 +120,12 @@ func TestExpand(t *testing.T) {
 		{
 			"long two call chain",
 			"func (q Q) AReallyLongMethodNameThatPushesTheLineOverEightyCharactersNow() Q { return q }\nvar _ = Q{}.AReallyLongMethodNameThatPushesTheLineOverEightyCharactersNow().Next()",
-			"var _ = Q{}.AReallyLongMethodNameThatPushesTheLineOverEightyCharactersNow().\n\tNext()",
+			"var _ = Q{}.AReallyLongMethodNameThatPushesTheLineOverEightyCharactersNow().Next()",
+		},
+		{
+			"broken long two call chain",
+			"func (q Q) AReallyLongMethodNameThatPushesTheLineOverEightyCharactersNow() Q { return q }\nvar _ = Q{}.AReallyLongMethodNameThatPushesTheLineOverEightyCharactersNow().\n\tNext()",
+			"var _ = Q{}.AReallyLongMethodNameThatPushesTheLineOverEightyCharactersNow().Next()",
 		},
 		{
 			"indexed struct fields",
