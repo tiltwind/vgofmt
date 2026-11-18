@@ -1,0 +1,11 @@
+package sample
+
+type S struct{ A, B, C int }
+type Q struct{ Child *Q }
+
+func (q Q) Next(...Q) Q                                                      { return q }
+func (q Q) List() []Q                                                        { return nil }
+func (q Q) AReallyLongMethodNameThatPushesTheLineOverEightyCharactersNow() Q { return q }
+
+var _ = Q{}.AReallyLongMethodNameThatPushesTheLineOverEightyCharactersNow().
+	Next()

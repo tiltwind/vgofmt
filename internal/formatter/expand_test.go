@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"go/ast"
 	"go/format"
+	"go/importer"
 	"go/parser"
 	"go/token"
 	"go/types"
@@ -29,22 +30,37 @@ func TestExpand(t *testing.T) {
 		{
 			"three conditions",
 			"func f(a, b, c bool) { if a && b && c {} }",
-			"if a &&\n\t\tb &&\n\t\tc {",
+			"if a && b && c {",
 		},
 		{
 			"mixed logical operators",
 			"func f(a, b, c bool) bool { return a || b && c }",
-			"return a ||\n\t\tb &&\n\t\t\tc",
+			"return a || b && c",
 		},
 		{
 			"parentheses preserve grouping",
 			"func f(a, b, c, d bool) bool { return a && (b || c || d) }",
-			"return a && (b ||\n\t\tc ||\n\t\td)",
+			"return a && (b || c || d)",
 		},
 		{
 			"condition comments",
 			"func f(a, b, c bool) bool { return a && /* first */ b && // second\nc }",
-			"return a && /* first */\n\t\tb && // second\n\t\tc",
+			"return a && /* first */ b && // second\nc",
+		},
+		{
+			"short broken conditions are joined",
+			"func f(a, b, c bool) {\nif a &&\n\tb &&\n\tc {\n}\n}",
+			"if a && b && c {",
+		},
+		{
+			"phase rank conditions fit one line",
+			"func f(phaseRank map[string]int) {\nif phaseRank[\"p0\"] != 0 || phaseRank[\"p1\"] != 1 || phaseRank[\"p2\"] != 2 {\n}\n}",
+			"if phaseRank[\"p0\"] != 0 || phaseRank[\"p1\"] != 1 || phaseRank[\"p2\"] != 2 {",
+		},
+		{
+			"long conditions are split",
+			"func f(phaseRank map[string]int) {\nif phaseRank[\"p0\"] != 0 || phaseRank[\"p1\"] != 1 || phaseRank[\"p2\"] != 2 || phaseRank[\"p3\"] != 3 {\n}\n}",
+			"if phaseRank[\"p0\"] != 0 ||\n\t\tphaseRank[\"p1\"] != 1 ||\n\t\tphaseRank[\"p2\"] != 2 ||\n\t\tphaseRank[\"p3\"] != 3 {",
 		},
 		{
 			"two dots",
@@ -74,17 +90,37 @@ func TestExpand(t *testing.T) {
 		{
 			"fields before a call chain",
 			"var _ = Q{}.Child.Child.Next().Next().Next()",
-			"var _ = Q{}.Child.Child.\n\tNext().\n\tNext().\n\tNext()",
+			"var _ = Q{}.Child.Child.Next().\n\tNext().\n\tNext()",
 		},
 		{
 			"broken fields before a call chain",
 			"var _ = Q{}.Child.\n\tChild.Next().\n\tNext().\n\tNext()",
-			"var _ = Q{}.Child.Child.\n\tNext().\n\tNext().\n\tNext()",
+			"var _ = Q{}.Child.Child.Next().\n\tNext().\n\tNext()",
 		},
 		{
 			"field after a call chain",
 			"var _ = Q{}.Next().Next().Next().Child",
-			"var _ = Q{}.Next().\n\tNext().\n\tNext().\n\tChild",
+			"var _ = Q{}.Next().\n\tNext().\n\tNext().Child",
+		},
+		{
+			"field after a single call",
+			"var _ = Q{}.Next().Child.Child",
+			"var _ = Q{}.Next().Child.Child",
+		},
+		{
+			"fields around two calls",
+			"var _ = Q{}.Child.Next().Child.Next()",
+			"var _ = Q{}.Child.Next().Child.Next()",
+		},
+		{
+			"fields around three calls",
+			"var _ = Q{}.Child.Next().Child.Next().Child.Next()",
+			"var _ = Q{}.Child.Next().Child.\n\tNext().Child.\n\tNext()",
+		},
+		{
+			"long two call chain",
+			"func (q Q) AReallyLongMethodNameThatPushesTheLineOverEightyCharactersNow() Q { return q }\nvar _ = Q{}.AReallyLongMethodNameThatPushesTheLineOverEightyCharactersNow().Next()",
+			"var _ = Q{}.AReallyLongMethodNameThatPushesTheLineOverEightyCharactersNow().\n\tNext()",
 		},
 		{
 			"indexed struct fields",
@@ -192,6 +228,11 @@ func TestExpand(t *testing.T) {
 			"C: 3,\n}",
 		},
 		{
+			"redundant parentheses before a chain",
+			"var _ = ((1))\nvar _ = Q{}.Next().Next().Next()",
+			"var _ = (1)\nvar _ = Q{}.Next().\n\tNext().\n\tNext()",
+		},
+		{
 			"line comment",
 			"var _ = S{A: 1, // first\nB: 2, C: 3}",
 			"A: 1, // first\n",
@@ -200,28 +241,7 @@ func TestExpand(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			src := []byte("package sample\ntype S struct { A, B, C int }\ntype Q struct { Child *Q }\nfunc (q Q) Next(...Q) Q { return q }\nfunc (q Q) List() []Q { return nil }\n" + tc.source + "\n")
-			apply := func(src []byte) []byte {
-				t.Helper()
-				fset := token.NewFileSet()
-				file, err := parser.ParseFile(fset, "sample.go", src, parser.ParseComments)
-				if err != nil {
-					t.Fatal(err)
-				}
-				info := &types.Info{
-					Types:      make(map[ast.Expr]types.TypeAndValue),
-					Selections: make(map[*ast.SelectorExpr]*types.Selection),
-				}
-				config := types.Config{}
-				if _, err := config.Check("sample", fset, []*ast.File{file}, info); err != nil {
-					t.Fatal(err)
-				}
-				out, err := expand(src, file, fset, info)
-				if err != nil {
-					t.Fatal(err)
-				}
-				return out
-			}
-			got := apply(src)
+			got := expandSource(t, src)
 			goldenPath := filepath.Join("testdata", "expand", strings.ReplaceAll(tc.name, " ", "_")+".golden")
 			want, err := os.ReadFile(goldenPath)
 			if err != nil {
@@ -233,25 +253,112 @@ func TestExpand(t *testing.T) {
 			if !strings.Contains(string(got), tc.want) {
 				t.Fatalf("want %q in:\n%s", tc.want, got)
 			}
-			if again := apply(got); !bytes.Equal(got, again) {
+			if again := expandSource(t, got); !bytes.Equal(got, again) {
 				t.Fatalf("not idempotent:\n%s", again)
 			}
-			finish := func(src []byte) []byte {
-				t.Helper()
-				out, err := format.Source(src)
-				if err != nil {
-					t.Fatal(err)
-				}
-				out, err = gofumpt.Source(out, gofumpt.Options{LangVersion: "go1.26.0", ModulePath: "sample"})
-				if err != nil {
-					t.Fatal(err)
-				}
-				return out
-			}
-			combined := finish(got)
-			if again := finish(apply(combined)); !bytes.Equal(combined, again) {
+			combined := finishSource(t, got)
+			if again := finishSource(t, expandSource(t, combined)); !bytes.Equal(combined, again) {
 				t.Fatalf("combined pipeline not idempotent:\n%s", again)
 			}
 		})
 	}
+}
+
+func TestExpandKeepsObjectReferences(t *testing.T) {
+	src := []byte(`package sample
+
+import "fmt"
+
+type User struct {
+	ID       int
+	Name     string
+	Phone    string
+	Nickname string
+	Birthday string
+}
+
+type DB struct{ Error error }
+type Store struct{ DB *DB }
+
+func (db *DB) Create(value ...any) *DB { return db }
+
+func f(db Store, fullPhone string) {
+	fmt.Println(db.DB.Create(&User{
+		ID: 2003, Name: "王五", Phone: fullPhone, Nickname: "旧昵称", Birthday: "01-02",
+	}).Error)
+}
+`)
+	want := []byte(`package sample
+
+import "fmt"
+
+type User struct {
+	ID       int
+	Name     string
+	Phone    string
+	Nickname string
+	Birthday string
+}
+
+type DB struct{ Error error }
+type Store struct{ DB *DB }
+
+func (db *DB) Create(value ...any) *DB { return db }
+
+func f(db Store, fullPhone string) {
+	fmt.Println(db.DB.Create(&User{
+		ID:       2003,
+		Name:     "王五",
+		Phone:    fullPhone,
+		Nickname: "旧昵称",
+		Birthday: "01-02",
+	}).Error)
+}
+`)
+	got := expandSource(t, src)
+	if !bytes.Equal(got, want) {
+		t.Fatalf("object references were split:\n%s", got)
+	}
+	if again := expandSource(t, got); !bytes.Equal(got, again) {
+		t.Fatalf("not idempotent:\n%s", again)
+	}
+	combined := finishSource(t, got)
+	if again := finishSource(t, expandSource(t, combined)); !bytes.Equal(combined, again) {
+		t.Fatalf("combined pipeline not idempotent:\n%s", again)
+	}
+}
+
+func expandSource(t *testing.T, src []byte) []byte {
+	t.Helper()
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "sample.go", src, parser.ParseComments)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info := &types.Info{
+		Types:      make(map[ast.Expr]types.TypeAndValue),
+		Selections: make(map[*ast.SelectorExpr]*types.Selection),
+	}
+	config := types.Config{Importer: importer.Default()}
+	if _, err := config.Check("sample", fset, []*ast.File{file}, info); err != nil {
+		t.Fatal(err)
+	}
+	out, err := expand(src, file, fset, info)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+func finishSource(t *testing.T, src []byte) []byte {
+	t.Helper()
+	out, err := format.Source(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err = gofumpt.Source(out, gofumpt.Options{LangVersion: "go1.26.0", ModulePath: "sample"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
 }

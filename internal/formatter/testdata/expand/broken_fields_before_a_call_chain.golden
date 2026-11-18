@@ -6,7 +6,6 @@ type Q struct{ Child *Q }
 func (q Q) Next(...Q) Q { return q }
 func (q Q) List() []Q   { return nil }
 
-var _ = Q{}.Child.Child.
-	Next().
+var _ = Q{}.Child.Child.Next().
 	Next().
 	Next()

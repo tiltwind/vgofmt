@@ -62,7 +62,7 @@ func TestPipeline(t *testing.T) {
 	if _, err := Run(t.Context(), Options{Dir: dir, Write: true}); err != nil {
 		t.Fatal(err)
 	}
-	want := "package sample\n\ntype S struct{ A, B, C int }\n\nfunc f(a, b, c bool) S {\n\tif a &&\n\t\tb &&\n\t\tc {\n\t\treturn S{\n\t\t\t1,\n\t\t\t2,\n\t\t\t3,\n\t\t}\n\t}\n\treturn S{}\n}\n"
+	want := "package sample\n\ntype S struct{ A, B, C int }\n\nfunc f(a, b, c bool) S {\n\tif a && b && c {\n\t\treturn S{\n\t\t\t1,\n\t\t\t2,\n\t\t\t3,\n\t\t}\n\t}\n\treturn S{}\n}\n"
 	if got := string(read(t, dir, "sample.go")); got != want {
 		t.Fatalf("pipeline output:\n%s\nwant:\n%s", got, want)
 	}
@@ -117,9 +117,7 @@ func TestTagsAndPatterns(t *testing.T) {
 		Patterns: []string{"."},
 		Tags:     "special",
 	})
-	if err != nil ||
-		len(paths) != 1 ||
-		filepath.Base(paths[0]) != "tagged.go" {
+	if err != nil || len(paths) != 1 || filepath.Base(paths[0]) != "tagged.go" {
 		t.Fatalf("explicit tags: %v, %v", paths, err)
 	}
 	if _, err := Run(t.Context(), Options{Dir: dir, Patterns: []string{"./absent/..."}}); err == nil {

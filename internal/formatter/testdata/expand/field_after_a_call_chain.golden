@@ -8,5 +8,4 @@ func (q Q) List() []Q   { return nil }
 
 var _ = Q{}.Next().
 	Next().
-	Next().
-	Child
+	Next().Child

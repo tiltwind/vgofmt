@@ -70,9 +70,7 @@ func Run(ctx context.Context, opts Options) ([]string, error) {
 			originals[path] = true
 		}
 		for _, file := range pkg.Syntax {
-			path := pkg.Fset.
-				Position(file.Pos()).
-				Filename
+			path := pkg.Fset.Position(file.Pos()).Filename
 			if seen[path] ||
 				!originals[path] ||
 				ast.IsGenerated(file) ||
