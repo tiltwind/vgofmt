@@ -102,10 +102,11 @@ maintenance action; run `make format` after it.
 ## Development
 
 ```sh
+make format      # rewrite this repository with vgofmt itself
+make check-format
 go test ./...
 go vet ./...
 go build .
-go run . -check ./...
 ```
 
 Tests cover the extracted layout rules with complete expected outputs,
