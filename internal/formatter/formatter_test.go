@@ -88,6 +88,25 @@ func TestPipeline(t *testing.T) {
 	}
 }
 
+func TestGofumptRegroupingKeepsLayoutStable(t *testing.T) {
+	dir := fixture(t, map[string]string{
+		"sample.go": "package sample\n\ntype Q struct{}\n\nfunc (q Q) AReallyLongMethodNameThatPushesTheLineOverEightyCharactersNow() Q { return q }\n\nvar _ = 1\nvar _ = Q{}.AReallyLongMethodNameThatPushesTheLineOverEightyCharactersNow().Next()\n\nfunc (q Q) Next() Q { return q }\n",
+	})
+	if _, err := Run(t.Context(), Options{Dir: dir, Write: true}); err != nil {
+		t.Fatal(err)
+	}
+	first := read(t, dir, "sample.go")
+	if !bytes.Contains(first, []byte("Now().Next()")) {
+		t.Fatalf("width after gofumpt grouping not reconciled:\n%s", first)
+	}
+	if _, err := Run(t.Context(), Options{Dir: dir, Write: true}); err != nil {
+		t.Fatal(err)
+	}
+	if second := read(t, dir, "sample.go"); !bytes.Equal(first, second) {
+		t.Fatalf("second run changed layout:\nfirst:\n%s\nsecond:\n%s", first, second)
+	}
+}
+
 func TestLoadErrorDoesNotWrite(t *testing.T) {
 	for _, broken := range []string{"package sample\nvar _ = missing\n", "package sample\nfunc {"} {
 		dir := fixture(t, map[string]string{"good.go": "package sample\nvar A=1\n", "broken.go": broken})

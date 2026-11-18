@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"go/ast"
 	"go/format"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"sort"
@@ -103,6 +105,17 @@ func Run(ctx context.Context, opts Options) ([]string, error) {
 			if err != nil {
 				return nil, fmt.Errorf("%s: %w", path, err)
 			}
+			// gofumpt can regroup declarations and realign code, so line widths
+			// may change after the layout pass. Reconcile the width-sensitive
+			// breaks with the final text to keep repeated runs stable.
+			out, err = relayout(out)
+			if err != nil {
+				return nil, fmt.Errorf("%s: %w", path, err)
+			}
+			out, err = gofumpt.Source(out, options)
+			if err != nil {
+				return nil, fmt.Errorf("%s: %w", path, err)
+			}
 			if bytes.Equal(src, out) {
 				continue
 			}
@@ -135,6 +148,18 @@ func Run(ctx context.Context, opts Options) ([]string, error) {
 		paths = append(paths, change.path)
 	}
 	return paths, nil
+}
+
+// relayout re-applies width-sensitive layout after gofumpt, whose regrouping and
+// alignment can change line widths. Composite literals were already expanded by
+// the typed pass, so no type information is needed here.
+func relayout(src []byte) ([]byte, error) {
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "", src, parser.ParseComments)
+	if err != nil {
+		return nil, err
+	}
+	return expand(src, file, fset, nil)
 }
 
 func inVendor(path string) bool {

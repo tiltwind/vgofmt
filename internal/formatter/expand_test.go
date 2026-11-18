@@ -70,7 +70,7 @@ func TestExpand(t *testing.T) {
 		{
 			"three dots",
 			"var _ = Q{}.Next().Next().Next()",
-			"var _ = Q{}.Next().\n\tNext().\n\tNext()",
+			"var _ = Q{}.Next().Next().Next()",
 		},
 		{
 			"field selectors",
@@ -90,17 +90,17 @@ func TestExpand(t *testing.T) {
 		{
 			"fields before a call chain",
 			"var _ = Q{}.Child.Child.Next().Next().Next()",
-			"var _ = Q{}.Child.Child.Next().\n\tNext().\n\tNext()",
+			"var _ = Q{}.Child.Child.Next().Next().Next()",
 		},
 		{
 			"broken fields before a call chain",
 			"var _ = Q{}.Child.\n\tChild.Next().\n\tNext().\n\tNext()",
-			"var _ = Q{}.Child.Child.Next().\n\tNext().\n\tNext()",
+			"var _ = Q{}.Child.Child.Next().Next().Next()",
 		},
 		{
 			"field after a call chain",
 			"var _ = Q{}.Next().Next().Next().Child",
-			"var _ = Q{}.Next().\n\tNext().\n\tNext().Child",
+			"var _ = Q{}.Next().Next().Next().Child",
 		},
 		{
 			"field after a single call",
@@ -115,17 +115,17 @@ func TestExpand(t *testing.T) {
 		{
 			"fields around three calls",
 			"var _ = Q{}.Child.Next().Child.Next().Child.Next()",
-			"var _ = Q{}.Child.Next().Child.\n\tNext().Child.\n\tNext()",
+			"var _ = Q{}.Child.Next().Child.Next().Child.Next()",
 		},
 		{
 			"long two call chain",
 			"func (q Q) AReallyLongMethodNameThatPushesTheLineOverEightyCharactersNow() Q { return q }\nvar _ = Q{}.AReallyLongMethodNameThatPushesTheLineOverEightyCharactersNow().Next()",
-			"var _ = Q{}.AReallyLongMethodNameThatPushesTheLineOverEightyCharactersNow().Next()",
+			"var _ = Q{}.AReallyLongMethodNameThatPushesTheLineOverEightyCharactersNow().\n\tNext()",
 		},
 		{
 			"broken long two call chain",
 			"func (q Q) AReallyLongMethodNameThatPushesTheLineOverEightyCharactersNow() Q { return q }\nvar _ = Q{}.AReallyLongMethodNameThatPushesTheLineOverEightyCharactersNow().\n\tNext()",
-			"var _ = Q{}.AReallyLongMethodNameThatPushesTheLineOverEightyCharactersNow().Next()",
+			"var _ = Q{}.AReallyLongMethodNameThatPushesTheLineOverEightyCharactersNow().\n\tNext()",
 		},
 		{
 			"indexed struct fields",
@@ -150,17 +150,17 @@ func TestExpand(t *testing.T) {
 		{
 			"chain comments",
 			"var _ = Q{}.Next(). /* second */ Next().Next()",
-			"var _ = Q{}.Next(). /* second */\n\t\t\tNext().\n\t\t\tNext()",
+			"var _ = Q{}.Next(). /* second */ Next().Next()",
 		},
 		{
 			"nested argument chain",
 			"var _ = Q{}.Next(Q{}.Next().Next().Next()).Next().Next()",
-			"var _ = Q{}.Next(Q{}.Next().\n\tNext().\n\tNext()).\n\tNext().\n\tNext()",
+			"var _ = Q{}.Next(Q{}.Next().Next().Next()).Next().Next()",
 		},
 		{
 			"indexed chain",
 			"var _ = Q{}.Next().List()[0].Next()",
-			"var _ = Q{}.Next().\n\tList()[0].\n\tNext()",
+			"var _ = Q{}.Next().List()[0].Next()",
 		},
 		{
 			"two fields",
@@ -234,8 +234,8 @@ func TestExpand(t *testing.T) {
 		},
 		{
 			"redundant parentheses before a chain",
-			"var _ = ((1))\nvar _ = Q{}.Next().Next().Next()",
-			"var _ = (1)\nvar _ = Q{}.Next().\n\tNext().\n\tNext()",
+			"func (q Q) AReallyLongMethodNameThatPushesTheLineOverEightyCharactersNow() Q { return q }\nvar _ = ((1))\nvar _ = Q{}.AReallyLongMethodNameThatPushesTheLineOverEightyCharactersNow().Next()",
+			"var _ = (1)\nvar _ = Q{}.AReallyLongMethodNameThatPushesTheLineOverEightyCharactersNow().\n\tNext()",
 		},
 		{
 			"line comment",
@@ -361,7 +361,16 @@ func finishSource(t *testing.T, src []byte) []byte {
 	if err != nil {
 		t.Fatal(err)
 	}
-	out, err = gofumpt.Source(out, gofumpt.Options{LangVersion: "go1.26.0", ModulePath: "sample"})
+	options := gofumpt.Options{LangVersion: "go1.26.0", ModulePath: "sample"}
+	out, err = gofumpt.Source(out, options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err = relayout(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err = gofumpt.Source(out, options)
 	if err != nil {
 		t.Fatal(err)
 	}

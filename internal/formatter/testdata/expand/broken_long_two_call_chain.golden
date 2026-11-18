@@ -7,4 +7,5 @@ func (q Q) Next(...Q) Q                                                      { r
 func (q Q) List() []Q                                                        { return nil }
 func (q Q) AReallyLongMethodNameThatPushesTheLineOverEightyCharactersNow() Q { return q }
 
-var _ = Q{}.AReallyLongMethodNameThatPushesTheLineOverEightyCharactersNow().Next()
+var _ = Q{}.AReallyLongMethodNameThatPushesTheLineOverEightyCharactersNow().
+	Next()

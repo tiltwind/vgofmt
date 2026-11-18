@@ -11,7 +11,8 @@ import (
 
 func TestCommand(t *testing.T) {
 	bin := filepath.Join(t.TempDir(), "vgofmt")
-	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
+	if out, err := exec.Command("go", "build", "-o", bin, ".").
+		CombinedOutput(); err != nil {
 		t.Fatalf("build: %v\n%s", err, out)
 	}
 	dir := t.TempDir()

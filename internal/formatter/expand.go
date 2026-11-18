@@ -15,8 +15,9 @@ import (
 	"unicode/utf8"
 )
 
-// maxLineWidth is the maximum line width that keeps a logical expression on one
-// line. Wider layouts are split after logical operators.
+// maxLineWidth is the maximum line width that keeps a selector chain or a
+// logical expression on one line. Wider layouts are split at call boundaries or
+// after logical operators.
 const maxLineWidth = 80
 
 func expand(src []byte, file *ast.File, fset *token.FileSet, info *types.Info) ([]byte, error) {
@@ -45,9 +46,9 @@ func expand(src []byte, file *ast.File, fset *token.FileSet, info *types.Info) (
 			if !chains[expr] {
 				selectors, called := collectChain(expr, chains)
 				if len(selectors) > 0 {
-					// The layout pass never splits chains with at most two
-					// calls, so only longer chains need it.
-					hasChain = hasChain || len(called) > 2
+					// A single call can never gain its own line, so only chains
+					// with at least two calls need the width pass.
+					hasChain = hasChain || len(called) >= 2
 					// Object references stay together, so any existing break
 					// between a dot and its selector is a candidate for joining.
 					// The chain pass re-adds the breaks that are still required.
@@ -66,6 +67,11 @@ func expand(src []byte, file *ast.File, fset *token.FileSet, info *types.Info) (
 		}
 		lit, ok := node.(*ast.CompositeLit)
 		if !ok || len(lit.Elts) <= 2 {
+			return true
+		}
+		if info == nil {
+			// Width reconciliation runs after gofumpt without type
+			// information; literals were already expanded by the typed pass.
 			return true
 		}
 		typ := info.TypeOf(lit)
@@ -278,8 +284,8 @@ func conditionBreaks(src []byte) (map[int]string, error) {
 }
 
 // chainBreaks parses canonical source and inserts a newline before every call
-// that needs its own line. Only chains with more than two calls are split; chain
-// width never adds a break. The receiver, its first call, and all struct field
+// that needs its own line. Chains break only when a line touched by the chain
+// exceeds maxLineWidth. The receiver, its first call, and all struct field
 // selections remain together.
 func chainBreaks(src []byte) (map[int]string, error) {
 	fset := token.NewFileSet()
@@ -287,6 +293,7 @@ func chainBreaks(src []byte) (map[int]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	widths := lineWidths(src)
 	breaks := make(map[int]string)
 	chains := make(map[ast.Expr]bool)
 	ast.Inspect(file, func(node ast.Node) bool {
@@ -307,7 +314,7 @@ func chainBreaks(src []byte) (map[int]string, error) {
 			breakBefore[i] = calls > 0
 			calls++
 		}
-		if calls <= 2 {
+		if !chainTooWide(fset, widths, selectors) {
 			return true
 		}
 		for i, selector := range selectors {
@@ -318,6 +325,15 @@ func chainBreaks(src []byte) (map[int]string, error) {
 		return true
 	})
 	return breaks, nil
+}
+
+func chainTooWide(fset *token.FileSet, widths []int, selectors []*ast.SelectorExpr) bool {
+	for _, selector := range selectors {
+		if lineTooWide(fset, widths, selector.Sel.Pos()) {
+			return true
+		}
+	}
+	return false
 }
 
 func lineTooWide(fset *token.FileSet, widths []int, pos token.Pos) bool {
